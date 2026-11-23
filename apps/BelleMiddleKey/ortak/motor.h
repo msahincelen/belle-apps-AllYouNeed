@@ -3,7 +3,7 @@
 //
 // Dosya: C:\Data\BelleMiddleKey\kisayollar.txt (ASCII), satirlar:
 //   titresim 1
-//   kisayol <scan hex> <kod hex> <bas|cok|uzun> <sayi> <uygulama|sessiz|kapat|menu|gorev> <param hex>
+//   kisayol <scan hex> <kod hex> <bas|cok|uzun> <sayi> <uygulama|sessiz|kapat|menu|gorev|solsoftkey|sagsoftkey> <param hex>
 //
 // Yakalama: yalnizca "uzun" atanmis ve tus kodu olan tuslarda CaptureLongKey kullanilir; kisa basis
 // odaktaki uygulamaya gider (tus normal calismaya devam eder). Bas/cok atanmis tuslar tamamen yakalanir;
@@ -15,7 +15,10 @@
 #include <w32std.h>
 
 enum TTetik { ETetikBas = 0, ETetikCok = 1, ETetikUzun = 2 };
-enum TEylem { EEylemUygulama = 0, EEylemSessiz = 1, EEylemKapat = 2, EEylemMenu = 3, EEylemGorev = 4 };
+enum TEylem {
+    EEylemUygulama = 0, EEylemSessiz = 1, EEylemKapat = 2, EEylemMenu = 3, EEylemGorev = 4,
+    EEylemSolSoftkey = 5, EEylemSagSoftkey = 6
+};
 
 struct TKisayol
 {

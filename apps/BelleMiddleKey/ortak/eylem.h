@@ -17,6 +17,7 @@ private:
     static TInt UygulamaAc(RWsSession &aWs, TUint32 aUid);
     static TInt Sessiz();
     static TInt Kapat(RWsSession &aWs, TInt &aSayi);
+    static void SoftkeyBas(RWsSession &aWs, TUint aKod, TInt aScan);
     static void TusBas(RWsSession &aWs, TInt aScan, TInt aSureUs);
 };
 

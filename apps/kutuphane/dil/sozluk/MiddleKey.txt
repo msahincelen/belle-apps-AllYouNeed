@@ -23,6 +23,8 @@ Boşluk ¦ Space
 Eylemi de çalıştır ¦ Also run the action
 Farklı bir tuş algılandı. Aynı tuşa <b>bir kez basıp bırakın</b>. ¦ A different key was detected. <b>Press and release</b> the same key once.
 Görev değiştirici ¦ Task switcher
+Sol Softkey (Seçenekler) ¦ Left Softkey (Options)
+Sağ Softkey (Geri / Çıkış) ¦ Right Softkey (Back / Exit)
 Ham tuş kodları ¦ Raw key codes
 Hangi uygulama açılsın? ¦ Which app should open?
 Hazır. Atadığınız tuşlara basın. ¦ Ready. Press the keys you assigned.

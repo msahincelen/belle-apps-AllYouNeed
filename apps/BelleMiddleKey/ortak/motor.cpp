@@ -14,6 +14,14 @@ _LIT8(KSessiz, "sessiz");
 _LIT8(KKapat, "kapat");
 _LIT8(KMenu, "menu");
 _LIT8(KGorev, "gorev");
+_LIT8(KSolSoftkey, "solsoftkey");
+_LIT8(KSagSoftkey, "sagsoftkey");
+
+static TBool SoftkeyMi(TInt aScan, TUint aCode)
+{
+    return aScan == EStdKeyDevice0 || aScan == EStdKeyDevice1
+        || aCode == EKeyDevice0 || aCode == EKeyDevice1;
+}
 
 static const TInt KUzunUs = 700000;   // basili tutma esigi
 static const TInt KAraUs = 400000;    // pes pese basislar arasi en fazla bekleme
@@ -121,7 +129,8 @@ void CMotor::SatirL(const TDesC8 &aS)
     k.iSayi = (k.iTetik == ETetikCok) ? Max(2, Min(n, 5)) : 1;
     TPtrC8 e = l.NextToken();
     k.iEylem = (e == KSessiz) ? EEylemSessiz : (e == KKapat) ? EEylemKapat : (e == KMenu) ? EEylemMenu
-             : (e == KGorev) ? EEylemGorev : EEylemUygulama;
+             : (e == KGorev) ? EEylemGorev : (e == KSolSoftkey) ? EEylemSolSoftkey
+             : (e == KSagSoftkey) ? EEylemSagSoftkey : EEylemUygulama;
     v = 0;
     l.SkipSpace();
     l.Val(v, EHex);
@@ -139,7 +148,7 @@ void CMotor::KaydetL()
     User::LeaveIfError(f.Replace(fs, KDosya, EFileWrite));
     CleanupClosePushL(f);
     TBuf8<200> s;
-    s.Copy(_L8("# BelleMiddleKey: kisayol <scan> <kod> <bas|cok|uzun> <sayi> <uygulama|sessiz|kapat|menu|gorev> <param>\r\n"));
+    s.Copy(_L8("# BelleMiddleKey: kisayol <scan> <kod> <bas|cok|uzun> <sayi> <uygulama|sessiz|kapat|menu|gorev|solsoftkey|sagsoftkey> <param>\r\n"));
     f.Write(s);
     s.Format(_L8("titresim %d\r\n"), iTitresim ? 1 : 0);
     f.Write(s);
@@ -147,7 +156,9 @@ void CMotor::KaydetL()
         const TKisayol &k = iK[i];
         TPtrC8 t(k.iTetik == ETetikUzun ? KUzunAd() : k.iTetik == ETetikCok ? KCok() : KBas());
         TPtrC8 e(k.iEylem == EEylemSessiz ? KSessiz() : k.iEylem == EEylemKapat ? KKapat()
-               : k.iEylem == EEylemMenu ? KMenu() : k.iEylem == EEylemGorev ? KGorev() : KUygulama());
+               : k.iEylem == EEylemMenu ? KMenu() : k.iEylem == EEylemGorev ? KGorev()
+               : k.iEylem == EEylemSolSoftkey ? KSolSoftkey()
+               : k.iEylem == EEylemSagSoftkey ? KSagSoftkey() : KUygulama());
         s.Format(_L8("kisayol %x %x %S %d %S %x\r\n"), k.iScan, k.iCode, &t, k.iSayi, &e, k.iParam);
         f.Write(s);
     }
@@ -203,8 +214,10 @@ void CMotor::Yakala()
         TBool once = EFalse;
         for (TInt j = 0; j < i; ++j) if (iK[j].iScan == sc) once = ETrue;
         if (once) continue;
-        ++iTusSayisi;
         const TUint kod = KodBul(sc);
+        // Ayar ekrani gibi softkey'leri yakalama; uretilen olaylar odaktaki uygulamaya gitsin.
+        if (SoftkeyMi(sc, kod)) continue;
+        ++iTusSayisi;
         TYakalama y;
         if (Tam(sc)) {
             y.iTur = 0; y.iH = iWg.CaptureKeyUpAndDowns(sc, 0, 0, KYuksek);
@@ -244,6 +257,7 @@ TBool CMotor::OlayL(const TWsEvent &aE)
     const TInt t = aE.Type();
     if (t != EEventKey && t != EEventKeyDown && t != EEventKeyUp) return EFalse;
     const TKeyEvent &k = *aE.Key();
+    if (SoftkeyMi(k.iScanCode, t == EEventKey ? k.iCode : 0)) return EFalse;
 
     if (t == EEventKey) {
         TInt s = -1;

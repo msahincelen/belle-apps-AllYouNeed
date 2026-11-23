@@ -9,6 +9,7 @@ qrc_*
 debug/
 release/
 *.mmp
+!apps/BelleMiddleKey/servis/servis.mmp
 bld.inf
 *_template.pkg
 *_installer.pkg

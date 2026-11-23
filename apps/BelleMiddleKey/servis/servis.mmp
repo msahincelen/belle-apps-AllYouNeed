@@ -1,0 +1,17 @@
+TARGET          BelleMiddleKeyServis.exe
+TARGETTYPE      exe
+UID             0 0xE39CF23E
+CAPABILITY      SwEvent WriteDeviceData ReadDeviceData PowerMgmt
+
+SOURCEPATH      .
+SOURCE          servis.cpp
+SOURCEPATH      ../ortak
+SOURCE          motor.cpp eylem.cpp
+
+USERINCLUDE     ../ortak
+SYSTEMINCLUDE   /epoc32/include
+SYSTEMINCLUDE   /epoc32/include/app /epoc32/include/platform/app
+SYSTEMINCLUDE   /epoc32/include/mw /epoc32/include/platform/mw /epoc32/include/platform
+
+LIBRARY         euser.lib efsrv.lib ws32.lib apparc.lib apgrfx.lib
+LIBRARY         profileengine.lib hwrmvibraclient.lib

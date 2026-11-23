@@ -109,6 +109,8 @@ static QString eylemAdi(int eylem, TUint32 param)
     case EEylemKapat: return Dil::t("Açık uygulamaları kapat");
     case EEylemMenu: return Dil::t("Ana menü (Menü tuşu)");
     case EEylemGorev: return Dil::t("Görev değiştirici");
+    case EEylemSolSoftkey: return Dil::t("Sol Softkey (Seçenekler)");
+    case EEylemSagSoftkey: return Dil::t("Sağ Softkey (Geri / Çıkış)");
     }
     return QString();
 }
@@ -246,7 +248,9 @@ void Uygulama::kur()
         { QT_TR_NOOP("Sessiz ↔ önceki profil"), EEylemSessiz, 0 },
         { QT_TR_NOOP("Açık uygulamaları kapat"), EEylemKapat, 0 },
         { QT_TR_NOOP("Ana menü (Menü tuşu)"), EEylemMenu, 0 },
-        { QT_TR_NOOP("Görev değiştirici"), EEylemGorev, 0 } };
+        { QT_TR_NOOP("Görev değiştirici"), EEylemGorev, 0 },
+        { QT_TR_NOOP("Sol Softkey (Seçenekler)"), EEylemSolSoftkey, 0 },
+        { QT_TR_NOOP("Sağ Softkey (Geri / Çıkış)"), EEylemSagSoftkey, 0 } };
     for (unsigned i = 0; i < sizeof(eylemler) / sizeof(eylemler[0]); ++i) {
         QListWidgetItem *it = new QListWidgetItem(Dil::t(eylemler[i].ad), eylemListe);
         it->setData(Qt::UserRole, eylemler[i].eylem);

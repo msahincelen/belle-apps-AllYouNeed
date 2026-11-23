@@ -4,8 +4,8 @@
 #include <apgwgnam.h>
 #include <apgcli.h>
 #include <apacmdln.h>
-#include <ProEngFactory.h>
-#include <MProEngEngine.h>
+#include <proengfactory.h>
+#include <mproengengine.h>
 #include <hwrmvibra.h>
 
 static const TInt KSessizId = 1;   // Symbian profil kimlikleri: 0 Genel, 1 Sessiz
@@ -38,6 +38,8 @@ TInt Eylem::Calistir(RWsSession &aWs, const TKisayol &aK, TBool aTitresim, TInt 
     case EEylemKapat: { TInt n = 0; err = Kapat(aWs, n); if (aKapatilan) *aKapatilan = n; break; }
     case EEylemMenu: TusBas(aWs, EStdKeyApplication0, 60000); break;
     case EEylemGorev: TusBas(aWs, EStdKeyApplication0, 1500000); break;
+    case EEylemSolSoftkey: SoftkeyBas(aWs, EKeyDevice0, EStdKeyDevice0); break;
+    case EEylemSagSoftkey: SoftkeyBas(aWs, EKeyDevice1, EStdKeyDevice1); break;
     default: err = KErrNotSupported;
     }
     if (aTitresim && err == KErrNone) Titret(50);
@@ -109,6 +111,18 @@ TInt Eylem::Kapat(RWsSession &aWs, TInt &aSayi)
     }
     delete wgs;
     return KErrNone;
+}
+
+void Eylem::SoftkeyBas(RWsSession &aWs, TUint aKod, TInt aScan)
+{
+    // Mantiksal tus olayi, cihaz klavyesinin scan -> keycode eslemesine bagli degil.
+    TKeyEvent ev;
+    ev.iCode = aKod;
+    ev.iScanCode = aScan;
+    ev.iModifiers = 0;
+    ev.iRepeats = 0;
+    aWs.SimulateKeyEvent(ev);
+    aWs.Flush();
 }
 
 void Eylem::TusBas(RWsSession &aWs, TInt aScan, TInt aSureUs)

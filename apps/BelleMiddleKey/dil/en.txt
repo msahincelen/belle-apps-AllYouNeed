@@ -39,6 +39,7 @@ Orta tuş (ses tuşları arası)	Middle key (between the volume keys)
 Peş peşe 2 kez bas	Press twice
 Peş peşe 3 kez bas	Press three times
 Sağ	Right
+Sağ Softkey (Geri / Çıkış)	Right Softkey (Back / Exit)
 Servis çalışıyor: atanan tuşlar her uygulamada dinleniyor.	Service running: the assigned keys work in every app.
 Servis durdu: kısayollar çalışmaz.	Service stopped: shortcuts do not work.
 Servisi başlat	Start service
@@ -49,6 +50,7 @@ Sessiz ↔ önceki profil	Silent ↔ previous profile
 Sil	Delete
 Silme tuşu	Backspace key
 Sol	Left
+Sol Softkey (Seçenekler)	Left Softkey (Options)
 Şimdi aynı tuşu <b>1 saniye basılı tutun</b>.	Now <b>hold the same key for 1 second</b>.
 Test et	Test
 Titreşimle onayla	Confirm with vibration

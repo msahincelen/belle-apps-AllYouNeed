@@ -34,7 +34,7 @@ symbian {
     DEPLOYMENT += startup
 
     ICON = BelleMiddleKey.svg
-    VERSION = 2.0.0
+    VERSION = 2.0.1
     DEPLOYMENT.display_name = BelleMiddleKey
     vendorinfo = "%{\"BelleMiddleKey\"}" ":\"BelleMiddleKey\""
     my_deployment.pkg_prerules += vendorinfo
