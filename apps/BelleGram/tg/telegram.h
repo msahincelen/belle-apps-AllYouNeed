@@ -11,6 +11,7 @@
 #include <QtCore/QVariant>
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
+#include <QtCore/QDateTime>
 
 class Baglanti;
 class QNetworkSession;
@@ -108,6 +109,8 @@ signals:
     void yuklemeIlerleme(const QString &sohbet, const QString &geciciId, int yuzde);
 
 private slots:
+    void nabiz();                    // 5 dakikada bir bellek / liste boyutu gunluge (cokme teshisi)
+    void gunlukYaz();                // biriken gunluk satirlarini dosyaya toplu yaz
     void agAcildi();
     void anahtarHazir();
     void sonuc(int istek, const QVariant &v);
@@ -184,6 +187,8 @@ private:
     void dcIsSonucu(int dc, const Is &is, const QVariant &v);
 
     QString m_klasor, m_gunlukDosya, m_durum, m_benAd, m_telefon, m_kodHash, m_kodBilgi, m_ipucu, m_bekleyenKod;
+    QString m_sonKodNumara;      // cift kod istegi korumasi (kodGonder)
+    QDateTime m_sonKodIstegi;
     QString m_parola;
     int m_apiId;
     QString m_apiHash;
@@ -215,6 +220,15 @@ private:
     Indirme m_ind;
     bool m_indAktif;
     QTimer m_indZaman;
+    // cokme teshisi
+    QTimer m_nabiz;
+    QTimer m_gunlukZaman;            // toplu gunluk yazma (en fazla dakikada bir)
+    QStringList m_yazilacak;
+    bool m_oncekiCokme;
+    QDateTime m_sonNabiz;
+    qint64 m_sonCpu;
+    QString isaretDosyasi() const;
+    QString bellekOzeti() const;
     QList<Yukleme> m_yukKuyruk;
     Yukleme m_yuk;
     bool m_yukAktif;

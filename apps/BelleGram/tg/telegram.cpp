@@ -19,6 +19,8 @@
 #ifdef Q_OS_SYMBIAN
 #include <QtNetwork/QNetworkConfigurationManager>
 #include <QtNetwork/QNetworkSession>
+#include <e32std.h>
+#include <hal.h>
 #endif
 
 #define L1(s) QString::fromLatin1(s)
@@ -104,7 +106,7 @@ static QString uzantiMime(const QString &yol)
 Telegram::Telegram(const QString &veriKlasoru, const QString &gunlukDosyasi, QObject *parent)
     : QObject(parent), m_klasor(veriKlasoru), m_gunlukDosya(gunlukDosyasi), m_durum(L1("baslangic")), m_apiId(0), m_benId(0), m_anaDc(2), m_bagli(false),
       m_girisli(false), m_baglantiIstendi(false), m_b(0), m_ag(0), m_sonTarih(0), m_sonMesaj(0), m_yenidenDeneme(0),
-      m_indAktif(false), m_yukAktif(false)
+      m_indAktif(false), m_yukAktif(false), m_oncekiCokme(false), m_sonCpu(0)
 {
     QDir().mkpath(m_klasor);
     QDir().mkpath(medyaKlasoru());
@@ -114,23 +116,100 @@ Telegram::Telegram(const QString &veriKlasoru, const QString &gunlukDosyasi, QOb
     // onbellegi sinirla: en yeni 400 dosya
     const QFileInfoList l = QDir(medyaKlasoru()).entryInfoList(QDir::Files, QDir::Time);
     for (int i = 400; i < l.size(); ++i) QFile::remove(l.at(i).absoluteFilePath());
+
+    // Cokme teshisi: calisirken isaret dosyasi durur, duzgun kapanista silinir. Acilista hala duruyorsa onceki
+    // oturum yikicinin calismasina firsat olmadan bitmis demektir (panic / bellek). Bkz. basla() ve nabiz().
+    m_oncekiCokme = QFile::exists(isaretDosyasi());
+    QFile isaret(isaretDosyasi());
+    if (isaret.open(QIODevice::WriteOnly)) { isaret.write(QDateTime::currentDateTime().toString(Qt::ISODate).toLatin1()); isaret.close(); }
+    m_nabiz.setInterval(5 * 60000);   // 5 dk (dosya yazmasini azaltmak icin; kasma olcumu BelleIslemci ile)
+    connect(&m_nabiz, SIGNAL(timeout()), this, SLOT(nabiz()));
+    m_nabiz.start();
+    m_gunlukZaman.setSingleShot(true);
+    m_gunlukZaman.setInterval(60000);
+    connect(&m_gunlukZaman, SIGNAL(timeout()), this, SLOT(gunlukYaz()));
 }
 
 Telegram::~Telegram()
 {
     kaydet();
+    kayit(L1("kapanis: duzgun (") + bellekOzeti() + L1(")"));   // "kapanis" acil: bekleyenlerle birlikte hemen yazilir
+    gunlukYaz();
+    QFile::remove(isaretDosyasi());
 }
 
+QString Telegram::isaretDosyasi() const { return m_klasor + L1("/calisiyor.isaret"); }
+
+// Bellek ve ic listelerin boyutu: sizinti ya da telefonun bellegi azalinca uygulamanin kapatilmasi gorulsun
+QString Telegram::bellekOzeti() const
+{
+    QString s;
+#ifdef Q_OS_SYMBIAN
+    TInt ayrilan = 0;
+    User::AllocSize(ayrilan);
+    TInt bos = 0, toplam = 0;
+    HAL::Get(HALData::EMemoryRAMFree, bos);
+    HAL::Get(HALData::EMemoryRAM, toplam);
+    s = L1("yigin=%1KB/%2KB tel_bos=%3MB/%4MB ").arg(ayrilan / 1024).arg(User::Heap().Size() / 1024).arg(bos / 1048576).arg(toplam / 1048576);
+#endif
+    return s + L1("isler=%1 dcIsler=%2 kisi=%3 grup=%4 gorulen=%5 medya=%6 ozet=%7 indKuyruk=%8 yukKuyruk=%9")
+        .arg(m_isler.size()).arg(m_dcIsler.size()).arg(m_kisiler.size()).arg(m_gruplar.size()).arg(m_gorulen.size())
+        .arg(m_medya.size()).arg(m_ozet.size()).arg(m_indKuyruk.size()).arg(m_yukKuyruk.size());
+}
+
+// Kasma teshisi: son nabizdan beri gecen sure (120 sn'den cok fazlaysa olay dongusu tikanmis) ve
+// uygulamanin harcadigi islemci suresi (bosta ~0; 100'e yakinsa uygulama donguye girip telefonu kasiyor).
+void Telegram::nabiz()
+{
+    QString ek;
+    const QDateTime simdi = QDateTime::currentDateTime();
+    if (m_sonNabiz.isValid()) ek += L1(" aralik=%1sn").arg(m_sonNabiz.secsTo(simdi));
+    m_sonNabiz = simdi;
+#ifdef Q_OS_SYMBIAN
+    TTimeIntervalMicroSeconds cpu(0);
+    if (RThread().GetCpuTime(cpu) == KErrNone) {
+        const qint64 us = cpu.Int64();
+        if (m_sonCpu > 0) ek += L1(" cpu=%1sn").arg((us - m_sonCpu) / 1000000);
+        m_sonCpu = us;
+    }
+#endif
+    kayit(L1("nabiz: ") + bellekOzeti() + (m_bagli ? L1(" bagli") : L1(" bagli-degil")) + ek);
+}
+
+// Gunluk satirlari bellekte biriktirilir, dosyaya en fazla dakikada bir toplu yazilir: C:/Data altindaki her dosya
+// degisikligi telefonun arama dizinleyicisini (cpixsearchserver) uyandiriyor, sik kucuk yazmalar telefonu kasiyordu.
+// Onemli satirlar (acilis, uyari, kapanis, giris, hata) cokmede kaybolmasin diye hemen yazilir.
 void Telegram::kayit(const QString &s)
 {
     const QString satir = QDateTime::currentDateTime().toString(L1("hh:mm:ss ")) + s;
     m_gunluk.append(satir);
     while (m_gunluk.size() > 300) m_gunluk.removeFirst();
-    QFile f(m_gunlukDosya.isEmpty() ? m_klasor + L1("/gunluk.txt") : m_gunlukDosya);
+    m_yazilacak.append(satir);
+    const bool acil = s.startsWith(L1("basla")) || s.startsWith(L1("UYARI")) || s.startsWith(L1("kapanis")) ||
+                      s.startsWith(L1("giris")) || s.startsWith(L1("hata")) || s.startsWith(L1("api"));
+    if (acil || m_yazilacak.size() > 200) gunlukYaz();
+    else if (!m_gunlukZaman.isActive()) m_gunlukZaman.start();
+}
+
+void Telegram::gunlukYaz()
+{
+    m_gunlukZaman.stop();
+    if (m_yazilacak.isEmpty()) return;
+    const QString yol = m_gunlukDosya.isEmpty() ? m_klasor + L1("/gunluk.txt") : m_gunlukDosya;
+    QFile f(yol);
     if (f.open(QIODevice::Append | QIODevice::Text)) {
-        if (f.size() > 200000) { f.close(); f.open(QIODevice::WriteOnly | QIODevice::Text); }
-        QTextStream(&f) << satir << "\n";
+        if (f.size() > 200000) {
+            // dolunca silme: bir onceki parcayi .1 olarak sakla (cokme oncesi kayitlar kaybolmasin)
+            f.close();
+            QFile::remove(yol + L1(".1"));
+            QFile::rename(yol, yol + L1(".1"));
+            f.setFileName(yol);
+            f.open(QIODevice::WriteOnly | QIODevice::Text);
+        }
+        QTextStream t(&f);
+        for (int i = 0; i < m_yazilacak.size(); ++i) t << m_yazilacak.at(i) << "\n";
     }
+    m_yazilacak.clear();
 }
 
 void Telegram::durumYap(const QString &d)
@@ -164,7 +243,9 @@ void Telegram::basla()
     m_benAd = s.value(L1("benAd")).toString();
     m_telefon = s.value(L1("telefon")).toString();
     apiOku();
-    kayit(L1("basla: dc%1 girisli=%2 api=%3").arg(m_anaDc).arg(m_girisli).arg(m_apiId ? L1("var") : L1("yok")));
+    kayit(L1("basla: dc%1 girisli=%2 api=%3 surum=0.3.1").arg(m_anaDc).arg(m_girisli).arg(m_apiId ? L1("var") : L1("yok")));
+    if (m_oncekiCokme) { kayit(L1("UYARI: onceki oturum duzgun kapanmadi (cokme ya da sistem kapatti)")); m_oncekiCokme = false; }
+    kayit(L1("nabiz: ") + bellekOzeti());
     if (!m_apiId || m_apiHash.isEmpty()) { durumYap(L1("api")); return; }   // apiAyarla() basla()'yi yeniden cagirir
     durumYap(L1("baglaniyor"));
     if (m_ag) { agAcildi(); return; }   // ag oturumu zaten acik (API sonradan girildi)
@@ -231,7 +312,7 @@ void Telegram::initAyarla(Baglanti *b) const
     ib.apiId = m_apiId;
     ib.cihaz = L1("Nokia E6");
     ib.sistem = L1("Symbian Belle");
-    ib.surum = L1("BelleGram 0.3");
+    ib.surum = L1("BelleGram 0.3.1");
     ib.dil = Dil::tek() ? Dil::tek()->kod() : L1("tr");
     b->initAyarla(ib);
 }
@@ -274,6 +355,7 @@ void Telegram::anahtarHazir()
         // veri merkezi degisti: giris istegini yeni merkezde tekrarla
         const QString t = m_bekleyenKod;
         m_bekleyenKod.clear();
+        m_sonKodIstegi = QDateTime();   // ic tekrar: 20 sn korumasina takilmasin
         kodGonder(t);
         return;
     }
@@ -290,6 +372,15 @@ void Telegram::koptu(const QString &neden)
     if (m_bagli) { m_bagli = false; emit bagliDegisti(); }
     kayit(L1("koptu: ") + neden);
     ++m_yenidenDeneme;
+#ifdef Q_OS_SYMBIAN
+    // Wi-Fi uyuyunca / ag degisince Symbian ag oturumu kapanir; yeni soketler "Invalid socket descriptor"
+    // verir ve oturum yeniden acilmadan baglanti hic kurulamaz (gunlukte saatlerce 900+ deneme gorulmustu).
+    if (m_ag && (m_yenidenDeneme == 2 || m_yenidenDeneme % 5 == 0 || neden.contains(L1("descriptor"), Qt::CaseInsensitive))) {
+        kayit(L1("ag oturumu yeniden aciliyor (durum %1)").arg(int(m_ag->state())));
+        m_ag->close();
+        m_ag->open();
+    }
+#endif
     QTimer::singleShot(qMin(30000, 2000 * m_yenidenDeneme), this, SLOT(yenidenBaglan()));
 }
 
@@ -304,7 +395,10 @@ int Telegram::cagir(const QString &yontem, const QVariantMap &p, int tur, const 
     QByteArray sonucTuru;
     const QByteArray g = TlSema::tek().cagri(yontem, p, &sonucTuru);
     if (g.isEmpty()) { kayit(L1("serilestirilemedi: ") + yontem + L1(" ") + TlSema::tek().sonHata); return 0; }
-    const int id = m_b->gonder(g, sonucTuru);
+    // Giris istekleri baglanti kopunca kendiliginden tekrarlanmaz: her auth.sendCode yeni kod uretip elde
+    // edilen kodu gecersiz kilar (PHONE_CODE_INVALID) ve ust uste gonderim FLOOD_WAIT cezasi getirir.
+    const bool tekrar = !(yontem == L1("auth.sendCode") || yontem == L1("auth.resendCode") || yontem == L1("auth.signIn") || yontem == L1("auth.checkPassword"));
+    const int id = m_b->gonder(g, sonucTuru, tekrar);
     Is is;
     is.tur = tur; is.sohbet = sohbet; is.ek = ek; is.daha = daha;
     m_isler.insert(id, is);
@@ -325,6 +419,15 @@ void Telegram::kodGonder(const QString &telefon)
     QString t;
     for (int i = 0; i < telefon.size(); ++i) if (telefon.at(i).isDigit()) t.append(telefon.at(i));
     if (t.size() < 8) { emit hataOldu(Dil::t("Telefon numarasını ülke koduyla yazın (örn. 905321234567).")); return; }
+    // ayni numaraya 20 sn icinde ikinci kod istegi gonderme (cift basma / ust uste deneme FLOOD_WAIT getirir).
+    // Veri merkezi yonlendirmesindeki ic tekrar bunu sifirlar (anahtarHazir).
+    if (t == m_sonKodNumara && m_sonKodIstegi.isValid() && m_sonKodIstegi.secsTo(QDateTime::currentDateTime()) < 20) {
+        kayit(L1("kod istegi atlandi (20 sn dolmadi)"));
+        emit hataOldu(Dil::t("Kod az önce istendi. Gelmesini birkaç saniye bekleyin."));
+        return;
+    }
+    m_sonKodNumara = t;
+    m_sonKodIstegi = QDateTime::currentDateTime();
     m_telefon = t;
     QVariantMap p;
     p.insert(K("phone_number"), L1("+") + t);
@@ -340,6 +443,12 @@ void Telegram::kodOnayla(const QString &kod)
     QString k;
     for (int i = 0; i < kod.size(); ++i) if (kod.at(i).isDigit()) k.append(kod.at(i));
     if (k.isEmpty()) return;
+    // ayni kodu 8 sn icinde ikinci kez gonderme (Enter'a/tamam'a ust uste basma)
+    static QString sonKod;
+    static QDateTime sonGonderim;
+    if (k == sonKod && sonGonderim.isValid() && sonGonderim.secsTo(QDateTime::currentDateTime()) < 8) return;
+    sonKod = k;
+    sonGonderim = QDateTime::currentDateTime();
     QVariantMap p;
     p.insert(K("phone_number"), L1("+") + m_telefon);
     p.insert(K("phone_code_hash"), m_kodHash);
@@ -464,6 +573,7 @@ void Telegram::sonuc(int istek, const QVariant &v)
         if (t == L1("auth.sentCodeSuccess")) { girisTamam(m.value(K("authorization")).toMap().value(K("user")).toMap()); return; }
         m_kodHash = m.value(K("phone_code_hash")).toString();
         const QString kt = tip(m.value(K("type")));
+        kayit(L1("kod gonderildi: ") + kt + L1(" sonraki=") + tip(m.value(K("next_type"))) + L1(" sure=") + m.value(K("timeout")).toString());
         if (kt == L1("auth.sentCodeTypeApp")) m_kodBilgi = Dil::t("Kod, Telegram uygulamanıza (başka bir cihazdaki) mesaj olarak gönderildi.");
         else if (kt == L1("auth.sentCodeTypeSms")) m_kodBilgi = Dil::t("Kod SMS ile gönderildi.");
         else if (kt == L1("auth.sentCodeTypeCall")) m_kodBilgi = Dil::t("Kod sesli arama ile söylenecek.");
@@ -751,6 +861,7 @@ QString Telegram::hataMetni(const QString &k)
         return Dil::t("Çok fazla deneme. %1 dakika sonra tekrar deneyin.").arg(qMax(1, (sn + 59) / 60));
     }
     if (k == L1("PHONE_NUMBER_INVALID")) return Dil::t("Telefon numarası geçersiz.");
+    if (k == L1("BAGLANTI_KOPTU")) return Dil::t("Bağlantı koptu. Lütfen tekrar deneyin.");
     if (k == L1("PHONE_CODE_INVALID")) return Dil::t("Kod yanlış.");
     if (k == L1("PHONE_CODE_EXPIRED")) return Dil::t("Kodun süresi doldu. Yeni kod isteyin.");
     if (k == L1("PASSWORD_HASH_INVALID")) return Dil::t("Şifre yanlış.");
@@ -1025,7 +1136,7 @@ QVariantMap Telegram::mesajHarita(const QVariantMap &m) const
     const QString mt = md.value(K("_")).toString();
     if (mt.isEmpty() || mt == L1("messageMediaEmpty") || mt == L1("messageMediaWebPage")) {
         m_ozet.insert(sohbet + L1(":") + h.value(K("id")).toString(), h);
-        if (m_ozet.size() > 3000) m_ozet.clear();
+        if (m_ozet.size() > 800) m_ozet.clear();   // yalniz yanit alintilari icin; tam mesaj haritalari bellek yer
         return h;
     }
     if (mt == L1("messageMediaPhoto")) {
@@ -1134,7 +1245,7 @@ QVariantMap Telegram::mesajHarita(const QVariantMap &m) const
         h.insert(K("tur"), L1("diger"));
     }
     m_ozet.insert(sohbet + L1(":") + h.value(K("id")).toString(), h);
-    if (m_ozet.size() > 3000) m_ozet.clear();
+    if (m_ozet.size() > 800) m_ozet.clear();
     return h;
 }
 

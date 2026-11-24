@@ -213,3 +213,5 @@ yazıyor… ¦ typing…
 Yeni mesaj ¦ New message
 Yükleniyor %1 ¦ Uploading %1
 Zar ¦ Dice
+Bağlantı koptu. Lütfen tekrar deneyin. ¦ Connection lost. Please try again.
+Kod az önce istendi. Gelmesini birkaç saniye bekleyin. ¦ A code was just requested. Please wait a few seconds for it to arrive.

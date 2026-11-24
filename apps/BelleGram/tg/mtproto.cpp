@@ -155,9 +155,14 @@ void Baglanti::baglandi()
     m_ping.start();
     emit gunluk(QString::fromLatin1("DC%1 hazir (kayitli anahtar)").arg(m_dc));
     emit anahtarHazir();
-    // baglanti koptuysa yanit bekleyenleri yeniden gonder
+    // baglanti koptuysa yanit bekleyenleri yeniden gonder; tekrarlanmamasi gerekenler (giris) hata olarak doner
     const QList<qint64> eski = m_bekleyen.keys();
-    for (int i = 0; i < eski.size(); ++i) yenidenGonder(eski[i]);
+    for (int i = 0; i < eski.size(); ++i) {
+        if (m_bekleyen.value(eski[i]).tekrar) { yenidenGonder(eski[i]); continue; }
+        const Bekleyen b = m_bekleyen.take(eski[i]);
+        emit gunluk(QString::fromLatin1("DC%1 istek %2 baglanti koptugu icin tekrarlanmadi").arg(m_dc).arg(b.istek));
+        emit hata(b.istek, -1, QString::fromLatin1("BAGLANTI_KOPTU"));
+    }
     kuyruguBosalt();
 }
 
@@ -439,7 +444,7 @@ QByteArray Baglanti::sarmala(const QByteArray &govde)
     return w.veri;
 }
 
-int Baglanti::gonder(const QByteArray &govde, const QByteArray &sonucTuru)
+int Baglanti::gonder(const QByteArray &govde, const QByteArray &sonucTuru, bool tekrar)
 {
     Bekleyen b;
     b.istek = ++m_sonIstek;
@@ -447,6 +452,7 @@ int Baglanti::gonder(const QByteArray &govde, const QByteArray &sonucTuru)
     b.ham = govde;
     b.tur = sonucTuru.isEmpty() ? QByteArray("Object") : sonucTuru;
     b.icerik = true;
+    b.tekrar = tekrar;
     m_kuyruk.append(b);
     if (m_hazir) kuyruguBosalt();
     else if (!m_soket) baglan();

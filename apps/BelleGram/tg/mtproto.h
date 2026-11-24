@@ -35,7 +35,9 @@ public:
     void baglan();
     void kapat();
     // Govde: serilestirilmis TL fonksiyonu. sonucTuru: yanitin okunacagi tur. Donus: istek numarasi
-    int gonder(const QByteArray &govde, const QByteArray &sonucTuru);
+    // tekrar=false: baglanti koparsa yeniden GONDERILMEZ, hata(istek, -1, "BAGLANTI_KOPTU") verilir
+    // (auth.sendCode her gonderimde yeni kod uretir; tekrar gonderilince elde edilen kod gecersiz kalir)
+    int gonder(const QByteArray &govde, const QByteArray &sonucTuru, bool tekrar = true);
 
 signals:
     void anahtarHazir();                       // yetki anahtari var ve baglanti kuruldu
@@ -53,8 +55,9 @@ private slots:
 
 private:
     struct Bekleyen {
-        Bekleyen() : istek(0), icerik(true), sarili(false) {}
+        Bekleyen() : istek(0), icerik(true), sarili(false), tekrar(true) {}
         int istek; QByteArray govde; QByteArray ham; QByteArray tur; bool icerik; bool sarili;
+        bool tekrar;   // baglanti koparsa yeniden gonderilsin mi (giris istekleri: hayir)
     };
 
     void cerceveYaz(const QByteArray &paket);
